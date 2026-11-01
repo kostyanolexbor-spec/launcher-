@@ -1,0 +1,771 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Create project files
+        run: |
+          mkdir -p "app"
+          cat > "app/build.gradle.kts" <<'LAUNCHER_EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.mylauncher.lite"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.mylauncher.lite"
+                  minSdk = 24
+                  targetSdk = 33
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
+          }
+          LAUNCHER_EOF
+          mkdir -p "app/src/main"
+          cat > "app/src/main/AndroidManifest.xml" <<'LAUNCHER_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+              <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="Лаунчер">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:stateNotNeeded="true"
+                      android:screenOrientation="portrait"
+                      android:configChanges="orientation|screenSize|keyboardHidden"
+                      android:windowSoftInputMode="adjustResize"
+                      android:theme="@style/LauncherTheme">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.HOME" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          LAUNCHER_EOF
+          mkdir -p "app/src/main/java/com/mylauncher/lite"
+          cat > "app/src/main/java/com/mylauncher/lite/MainActivity.kt" <<'LAUNCHER_EOF'
+          package com.mylauncher.lite
+
+          import android.app.Activity
+          import android.app.AlertDialog
+          import android.content.BroadcastReceiver
+          import android.content.ComponentName
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.SharedPreferences
+          import android.content.pm.PackageManager
+          import android.content.res.Configuration
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Path
+          import android.graphics.RectF
+          import android.graphics.Typeface
+          import android.graphics.drawable.AdaptiveIconDrawable
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.Drawable
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.provider.AlarmClock
+          import android.provider.MediaStore
+          import android.provider.Settings
+          import android.text.Editable
+          import android.text.TextUtils
+          import android.text.TextWatcher
+          import android.util.TypedValue
+          import android.view.Gravity
+          import android.view.MotionEvent
+          import android.view.View
+          import android.view.ViewConfiguration
+          import android.view.ViewGroup
+          import android.view.animation.DecelerateInterpolator
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.widget.BaseAdapter
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.GridView
+          import android.widget.ImageView
+          import android.widget.LinearLayout
+          import android.widget.TextClock
+          import android.widget.TextView
+          import android.widget.Toast
+          import kotlin.math.abs
+
+          class AppItem(val label: String, val pkg: String, val cls: String, val icon: Bitmap?)
+
+          private const val MP = ViewGroup.LayoutParams.MATCH_PARENT
+          private const val WC = ViewGroup.LayoutParams.WRAP_CONTENT
+
+          private val ACCENTS = intArrayOf(
+              0xFF4285F4.toInt(), 0xFF34A853.toInt(), 0xFFEA4335.toInt(), 0xFFFB8C00.toInt(),
+              0xFF8E5CF7.toInt(), 0xFFE91E8C.toInt(), 0xFF00BFA5.toInt()
+          )
+
+          class MainActivity : Activity() {
+
+              private lateinit var p: SharedPreferences
+              private lateinit var root: FrameLayout
+              private lateinit var homeLayer: LinearLayout
+              private lateinit var clockBox: FrameLayout
+              private lateinit var dock: LinearLayout
+              private lateinit var drawer: LinearLayout
+              private lateinit var search: EditText
+              private lateinit var grid: GridView
+              private val adapter = GridAdapter()
+              private var all: List<AppItem> = emptyList()
+              private var shown: List<AppItem> = emptyList()
+              private val ui = Handler(Looper.getMainLooper())
+              private var drawerOpen = false
+              private var downX = 0f
+              private var downY = 0f
+              private var topAtDown = false
+              private var topInset = 0
+              private var bottomInset = 0
+              private val longRun = Runnable { if (!drawerOpen) showHomeMenu() }
+              private val pkgReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(c: Context?, i: Intent?) {
+                      loadApps()
+                  }
+              }
+
+              // ---------- helpers ----------
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+              private fun dark(): Boolean = when (p.getInt("theme", 0)) {
+                  1 -> false
+                  2 -> true
+                  else -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+              }
+
+              private fun accent(): Int = ACCENTS[p.getInt("accent", 0).coerceIn(0, ACCENTS.size - 1)]
+              private fun fg(): Int = if (dark()) 0xFFFFFFFF.toInt() else 0xFF1B1B1F.toInt()
+              private fun fg2(): Int = if (dark()) 0xB3FFFFFF.toInt() else 0x991B1B1F.toInt()
+              private fun iconDp(): Int = intArrayOf(44, 52, 60)[p.getInt("iconSize", 1).coerceIn(0, 2)]
+              private fun cols(): Int = intArrayOf(3, 4, 5)[p.getInt("cols", 1).coerceIn(0, 2)]
+
+              private fun clockColor(): Int = when (p.getInt("clockColor", 0)) {
+                  0 -> 0xFFFFFFFF.toInt()
+                  1 -> 0xFF111111.toInt()
+                  else -> accent()
+              }
+
+              private fun blend(a: Int, b: Int, t: Float): Int {
+                  val r = (Color.red(a) * (1 - t) + Color.red(b) * t).toInt()
+                  val g = (Color.green(a) * (1 - t) + Color.green(b) * t).toInt()
+                  val bl = (Color.blue(a) * (1 - t) + Color.blue(b) * t).toInt()
+                  return Color.rgb(r, g, bl)
+              }
+
+              private fun pill(c: Int, r: Int): GradientDrawable {
+                  val g = GradientDrawable()
+                  g.setColor(c)
+                  g.cornerRadius = r.toFloat()
+                  return g
+              }
+
+              private fun dlg(): AlertDialog.Builder = AlertDialog.Builder(
+                  this,
+                  if (dark()) android.R.style.Theme_DeviceDefault_Dialog_Alert
+                  else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
+              )
+
+              // ---------- lifecycle ----------
+              override fun onCreate(b: Bundle?) {
+                  super.onCreate(b)
+                  p = getSharedPreferences("cfg", MODE_PRIVATE)
+                  topInset = dp(24)
+                  root = FrameLayout(this)
+                  setContentView(root)
+                  root.setOnApplyWindowInsetsListener { _, ins ->
+                      topInset = ins.systemWindowInsetTop
+                      bottomInset = ins.systemWindowInsetBottom
+                      applyInsets()
+                      ins
+                  }
+                  buildHome()
+                  buildDrawer()
+                  applyInsets()
+                  loadApps()
+                  val f = IntentFilter(Intent.ACTION_PACKAGE_ADDED)
+                  f.addAction(Intent.ACTION_PACKAGE_REMOVED)
+                  f.addDataScheme("package")
+                  registerReceiver(pkgReceiver, f)
+              }
+
+              override fun onDestroy() {
+                  try { unregisterReceiver(pkgReceiver) } catch (e: Exception) { }
+                  super.onDestroy()
+              }
+
+              override fun onNewIntent(intent: Intent?) {
+                  super.onNewIntent(intent)
+                  if (drawerOpen) closeDrawer()
+              }
+
+              @Suppress("DEPRECATION")
+              override fun onBackPressed() {
+                  if (drawerOpen) closeDrawer()
+              }
+
+              private fun applyInsets() {
+                  if (::homeLayer.isInitialized) homeLayer.setPadding(0, topInset, 0, bottomInset)
+                  if (::drawer.isInitialized) drawer.setPadding(dp(8), topInset + dp(10), dp(8), bottomInset)
+              }
+
+              private fun rebuild() {
+                  drawerOpen = false
+                  ui.removeCallbacks(longRun)
+                  root.removeAllViews()
+                  buildHome()
+                  buildDrawer()
+                  applyInsets()
+                  loadApps()
+              }
+
+              // ---------- gestures ----------
+              override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+                  when (e.actionMasked) {
+                      MotionEvent.ACTION_DOWN -> {
+                          downX = e.rawX
+                          downY = e.rawY
+                          topAtDown = drawerOpen && atTop()
+                          ui.removeCallbacks(longRun)
+                          if (!drawerOpen) ui.postDelayed(longRun, ViewConfiguration.getLongPressTimeout() + 200L)
+                      }
+                      MotionEvent.ACTION_MOVE -> {
+                          if (abs(e.rawY - downY) > dp(16) || abs(e.rawX - downX) > dp(16)) ui.removeCallbacks(longRun)
+                      }
+                      MotionEvent.ACTION_UP -> {
+                          ui.removeCallbacks(longRun)
+                          val dy = e.rawY - downY
+                          val dx = e.rawX - downX
+                          if (!drawerOpen && dy < -dp(90) && abs(dy) > abs(dx)) openDrawer(false)
+                          else if (drawerOpen && topAtDown && dy > dp(110) && abs(dy) > abs(dx)) closeDrawer()
+                      }
+                      MotionEvent.ACTION_CANCEL -> ui.removeCallbacks(longRun)
+                  }
+                  return super.dispatchTouchEvent(e)
+              }
+
+              private fun atTop(): Boolean {
+                  if (!::grid.isInitialized) return false
+                  val first = grid.getChildAt(0)
+                  return grid.firstVisiblePosition == 0 && (first == null || first.top >= grid.paddingTop)
+              }
+
+              // ---------- home screen ----------
+              private fun buildHome() {
+                  homeLayer = LinearLayout(this)
+                  homeLayer.orientation = LinearLayout.VERTICAL
+                  root.addView(homeLayer, FrameLayout.LayoutParams(MP, MP))
+
+                  clockBox = FrameLayout(this)
+                  homeLayer.addView(clockBox, LinearLayout.LayoutParams(MP, 0, 1f))
+                  buildClock()
+
+                  val dk = dark()
+                  val base = if (dk) 0xFF1E1E22.toInt() else 0xFFFFFFFF.toInt()
+                  dock = LinearLayout(this)
+                  dock.orientation = LinearLayout.HORIZONTAL
+                  dock.gravity = Gravity.CENTER
+                  dock.setPadding(dp(8), dp(8), dp(8), dp(8))
+                  val dockBg = (blend(base, accent(), 0.16f) and 0x00FFFFFF) or 0xC8000000.toInt()
+                  dock.background = pill(dockBg, dp(30))
+                  val dlp = LinearLayout.LayoutParams(MP, WC)
+                  dlp.setMargins(dp(16), 0, dp(16), dp(12))
+                  homeLayer.addView(dock, dlp)
+
+                  val sp = LinearLayout(this)
+                  sp.orientation = LinearLayout.HORIZONTAL
+                  sp.gravity = Gravity.CENTER_VERTICAL
+                  sp.setPadding(dp(20), 0, dp(20), 0)
+                  sp.background = pill(if (dk) 0xEE2A2A30.toInt() else 0xF2FFFFFF.toInt(), dp(26))
+                  sp.setOnClickListener { openDrawer(true) }
+                  val g = TextView(this)
+                  g.text = "G"
+                  g.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                  g.typeface = Typeface.DEFAULT_BOLD
+                  g.setTextColor(accent())
+                  sp.addView(g)
+                  val t = TextView(this)
+                  t.text = "Поиск"
+                  t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                  t.setTextColor(fg2())
+                  t.setPadding(dp(14), 0, 0, 0)
+                  sp.addView(t)
+                  val slp = LinearLayout.LayoutParams(MP, dp(52))
+                  slp.setMargins(dp(16), 0, dp(16), dp(14))
+                  homeLayer.addView(sp, slp)
+              }
+
+              private fun clockText(f24: String, f12: String, sp: Float, tf: String, color: Int): TextClock {
+                  val c = TextClock(this)
+                  c.format24Hour = f24
+                  c.format12Hour = f12
+                  c.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+                  c.typeface = Typeface.create(tf, Typeface.NORMAL)
+                  c.setTextColor(color)
+                  c.includeFontPadding = false
+                  c.gravity = Gravity.CENTER
+                  c.setShadowLayer(10f, 0f, 2f, 0x40000000)
+                  return c
+              }
+
+              private fun buildClock() {
+                  clockBox.removeAllViews()
+                  val mul = floatArrayOf(0.8f, 1f, 1.2f)[p.getInt("clockSize", 1).coerceIn(0, 2)]
+                  val col = clockColor()
+                  val dateCol = (col and 0x00FFFFFF) or 0xE6000000.toInt()
+                  val h12 = p.getInt("h12", 0) == 1
+                  val hm = if (h12) "h:mm" else "HH:mm"
+                  val hh = if (h12) "h" else "HH"
+                  val date = "EEEE, d MMMM"
+                  val box = LinearLayout(this)
+                  box.orientation = LinearLayout.VERTICAL
+                  box.setOnClickListener {
+                      try { startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS)) } catch (e: Exception) { }
+                  }
+                  if (p.getInt("clockStyle", 0) == 0) {
+                      box.gravity = Gravity.CENTER_HORIZONTAL
+                      box.addView(clockText(hm, hm, 84f * mul, "sans-serif-thin", col))
+                      box.addView(clockText(date, date, 17f, "sans-serif", dateCol))
+                      clockBox.addView(box, FrameLayout.LayoutParams(WC, WC, Gravity.CENTER))
+                  } else {
+                      box.gravity = Gravity.START
+                      val minCol = if (p.getInt("clockColor", 0) == 2) 0xFFFFFFFF.toInt() else accent()
+                      box.addView(clockText(hh, hh, 104f * mul, "sans-serif-medium", col))
+                      val mlp = LinearLayout.LayoutParams(WC, WC)
+                      mlp.topMargin = -dp(22)
+                      box.addView(clockText("mm", "mm", 104f * mul, "sans-serif-medium", minCol), mlp)
+                      val dlp = LinearLayout.LayoutParams(WC, WC)
+                      dlp.topMargin = dp(6)
+                      box.addView(clockText(date, date, 16f, "sans-serif", dateCol), dlp)
+                      val flp = FrameLayout.LayoutParams(WC, WC, Gravity.TOP or Gravity.START)
+                      flp.setMargins(dp(32), dp(40), 0, 0)
+                      clockBox.addView(box, flp)
+                  }
+              }
+
+              // ---------- dock ----------
+              private fun dockPkgs(): MutableList<String> =
+                  p.getString("dock", "")!!.split(",").filter { it.isNotEmpty() }.toMutableList()
+
+              private fun saveDock(l: List<String>) {
+                  p.edit().putString("dock", l.joinToString(",")).apply()
+              }
+
+              private fun defaultDock(): MutableList<String> {
+                  val intents = listOf(
+                      Intent(Intent.ACTION_DIAL),
+                      Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING),
+                      Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_BROWSER),
+                      Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+                  )
+                  val out = mutableListOf<String>()
+                  for (i in intents) {
+                      val pkg = try {
+                          packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+                      } catch (e: Exception) { null }
+                      if (pkg != null && pkg != "android" && all.any { it.pkg == pkg } && pkg !in out) out.add(pkg)
+                  }
+                  return out
+              }
+
+              private fun refreshDock() {
+                  dock.removeAllViews()
+                  for (pkg in dockPkgs()) {
+                      val a = all.firstOrNull { it.pkg == pkg } ?: continue
+                      dock.addView(iconView(a, false, true), LinearLayout.LayoutParams(0, WC, 1f))
+                  }
+                  dock.visibility = if (dock.childCount == 0) View.GONE else View.VISIBLE
+              }
+
+              // ---------- icons ----------
+              private fun makeIcon(dr: Drawable, px: Int): Bitmap {
+                  val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+                  val c = Canvas(bmp)
+                  val path = Path()
+                  val rect = RectF(0f, 0f, px.toFloat(), px.toFloat())
+                  when (p.getInt("shape", 0)) {
+                      0 -> path.addCircle(px / 2f, px / 2f, px / 2f, Path.Direction.CW)
+                      1 -> path.addRoundRect(rect, px * 0.36f, px * 0.36f, Path.Direction.CW)
+                      else -> path.addRoundRect(rect, px * 0.14f, px * 0.14f, Path.Direction.CW)
+                  }
+                  c.clipPath(path)
+                  if (Build.VERSION.SDK_INT >= 26 && dr is AdaptiveIconDrawable) {
+                      val off = (px * 0.25f).toInt()
+                      val full = (px * 1.5f).toInt()
+                      val bg = dr.background
+                      if (bg != null) {
+                          bg.setBounds(-off, -off, full - off, full - off)
+                          bg.draw(c)
+                      }
+                      val fgd = dr.foreground
+                      if (fgd != null) {
+                          fgd.setBounds(-off, -off, full - off, full - off)
+                          fgd.draw(c)
+                      }
+                  } else {
+                      c.drawColor(0xFFF1F3F4.toInt())
+                      val pad = (px * 0.14f).toInt()
+                      dr.setBounds(pad, pad, px - pad, px - pad)
+                      dr.draw(c)
+                  }
+                  return bmp
+              }
+
+              private fun loadApps() {
+                  val px = dp(iconDp())
+                  Thread {
+                      val pm = packageManager
+                      val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                      val items = pm.queryIntentActivities(q, 0)
+                          .filter { it.activityInfo.packageName != packageName }
+                          .map { ri ->
+                              val ic = try { makeIcon(ri.loadIcon(pm), px) } catch (e: Throwable) { null }
+                              AppItem(ri.loadLabel(pm).toString(), ri.activityInfo.packageName, ri.activityInfo.name, ic)
+                          }
+                          .sortedBy { it.label.lowercase() }
+                      ui.post {
+                          all = items
+                          if (!p.contains("dock")) saveDock(defaultDock())
+                          refreshDock()
+                          filter(search.text.toString())
+                      }
+                  }.start()
+              }
+
+              private fun iconView(a: AppItem, label: Boolean, fromDock: Boolean): LinearLayout {
+                  val v = LinearLayout(this)
+                  v.orientation = LinearLayout.VERTICAL
+                  v.gravity = Gravity.CENTER_HORIZONTAL
+                  v.setPadding(dp(2), dp(6), dp(2), dp(6))
+                  v.tag = a
+                  val s = dp(iconDp())
+                  val iv = ImageView(this)
+                  iv.setImageBitmap(a.icon)
+                  v.addView(iv, LinearLayout.LayoutParams(s, s))
+                  if (label) {
+                      val t = TextView(this)
+                      t.text = a.label
+                      t.maxLines = 1
+                      t.ellipsize = TextUtils.TruncateAt.END
+                      t.gravity = Gravity.CENTER
+                      t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      t.setTextColor(fg())
+                      val tlp = LinearLayout.LayoutParams(MP, WC)
+                      tlp.topMargin = dp(4)
+                      v.addView(t, tlp)
+                  }
+                  v.setOnClickListener { launch(v.tag as AppItem) }
+                  v.setOnLongClickListener {
+                      appMenu(v.tag as AppItem, fromDock)
+                      true
+                  }
+                  v.setOnTouchListener { view, e ->
+                      when (e.actionMasked) {
+                          MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
+                          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                              view.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                      }
+                      false
+                  }
+                  return v
+              }
+
+              private fun launch(a: AppItem) {
+                  try {
+                      startActivity(
+                          Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                              .setComponent(ComponentName(a.pkg, a.cls))
+                              .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                      )
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "Не удалось открыть", Toast.LENGTH_SHORT).show()
+                  }
+                  if (drawerOpen) ui.postDelayed({ closeDrawer() }, 250)
+              }
+
+              private fun openUrl(u: String) {
+                  try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u))) } catch (e: Exception) { }
+              }
+
+              private fun appMenu(a: AppItem, fromDock: Boolean) {
+                  ui.removeCallbacks(longRun)
+                  val items = if (fromDock) arrayOf("Убрать из дока", "О приложении")
+                  else arrayOf("Добавить в док", "О приложении", "Удалить")
+                  dlg().setTitle(a.label).setItems(items) { _, w ->
+                      when (items[w]) {
+                          "Убрать из дока" -> {
+                              val l = dockPkgs()
+                              l.remove(a.pkg)
+                              saveDock(l)
+                              refreshDock()
+                          }
+                          "Добавить в док" -> {
+                              val l = dockPkgs()
+                              if (l.contains(a.pkg)) {
+                                  // already there
+                              } else if (l.size >= 4) {
+                                  Toast.makeText(this, "Док заполнен (максимум 4)", Toast.LENGTH_SHORT).show()
+                              } else {
+                                  l.add(a.pkg)
+                                  saveDock(l)
+                                  refreshDock()
+                              }
+                          }
+                          "О приложении" -> {
+                              try {
+                                  startActivity(
+                                      Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + a.pkg))
+                                          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                  )
+                              } catch (e: Exception) { }
+                          }
+                          else -> {
+                              try { startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:" + a.pkg))) } catch (e: Exception) { }
+                          }
+                      }
+                  }.show()
+              }
+
+              // ---------- drawer ----------
+              private fun buildDrawer() {
+                  val dk = dark()
+                  drawer = LinearLayout(this)
+                  drawer.orientation = LinearLayout.VERTICAL
+                  drawer.visibility = View.GONE
+                  drawer.setBackgroundColor(if (dk) 0xF2101014.toInt() else 0xF5F6F7FA.toInt())
+
+                  search = EditText(this)
+                  search.hint = "Поиск приложений"
+                  search.setSingleLine()
+                  search.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                  search.setTextColor(fg())
+                  search.setHintTextColor(fg2())
+                  search.background = pill(if (dk) 0xFF26262B.toInt() else 0xFFE8EAF0.toInt(), dp(26))
+                  search.setPadding(dp(22), 0, dp(22), 0)
+                  search.imeOptions = EditorInfo.IME_ACTION_GO
+                  search.addTextChangedListener(object : TextWatcher {
+                      override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+                      override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+                      override fun afterTextChanged(s: Editable?) {
+                          filter(s?.toString() ?: "")
+                      }
+                  })
+                  search.setOnEditorActionListener { _, _, _ ->
+                      val q = search.text.toString().trim()
+                      val f = shown.firstOrNull()
+                      if (f != null) launch(f)
+                      else if (q.isNotEmpty()) openUrl("https://www.google.com/search?q=" + Uri.encode(q))
+                      true
+                  }
+
+                  grid = GridView(this)
+                  grid.numColumns = cols()
+                  grid.verticalSpacing = dp(8)
+                  grid.selector = ColorDrawable(Color.TRANSPARENT)
+                  grid.setPadding(0, dp(12), 0, dp(8))
+                  grid.clipToPadding = false
+                  grid.isVerticalScrollBarEnabled = false
+                  grid.stretchMode = GridView.STRETCH_COLUMN_WIDTH
+                  grid.adapter = adapter
+
+                  val slp = LinearLayout.LayoutParams(MP, dp(52))
+                  slp.setMargins(dp(8), 0, dp(8), 0)
+                  drawer.addView(search, slp)
+                  drawer.addView(grid, LinearLayout.LayoutParams(MP, 0, 1f))
+                  root.addView(drawer, FrameLayout.LayoutParams(MP, MP))
+              }
+
+              private fun filter(q: String) {
+                  val s = q.trim()
+                  shown = all.filter { s.isEmpty() || it.label.contains(s, true) }
+                  adapter.notifyDataSetChanged()
+              }
+
+              private fun openDrawer(focus: Boolean) {
+                  if (drawerOpen) return
+                  drawerOpen = true
+                  search.setText("")
+                  grid.setSelection(0)
+                  drawer.visibility = View.VISIBLE
+                  drawer.alpha = 0f
+                  drawer.translationY = dp(120).toFloat()
+                  drawer.animate().alpha(1f).translationY(0f).setDuration(240)
+                      .setInterpolator(DecelerateInterpolator()).start()
+                  homeLayer.animate().alpha(0f).scaleX(0.94f).scaleY(0.94f).setDuration(220).start()
+                  if (focus) {
+                      ui.postDelayed({
+                          search.requestFocus()
+                          val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                          imm.showSoftInput(search, 0)
+                      }, 200)
+                  }
+              }
+
+              private fun closeDrawer() {
+                  if (!drawerOpen) return
+                  drawerOpen = false
+                  val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                  imm.hideSoftInputFromWindow(search.windowToken, 0)
+                  search.clearFocus()
+                  drawer.animate().alpha(0f).translationY(dp(120).toFloat()).setDuration(200)
+                      .withEndAction { if (!drawerOpen) drawer.visibility = View.GONE }.start()
+                  homeLayer.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220).start()
+              }
+
+              // ---------- menus ----------
+              private fun showHomeMenu() {
+                  val items = arrayOf("Настройки", "Обои", "Очистить док")
+                  dlg().setItems(items) { _, w ->
+                      when (w) {
+                          0 -> showSettings()
+                          1 -> try {
+                              startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Обои"))
+                          } catch (e: Exception) { }
+                          else -> {
+                              saveDock(emptyList())
+                              refreshDock()
+                          }
+                      }
+                  }.show()
+              }
+
+              private fun showSettings() {
+                  val names = arrayOf(
+                      "Часы: стиль", "Часы: цвет", "Часы: размер", "Формат времени",
+                      "Акцентный цвет", "Форма иконок", "Размер иконок", "Колонок в списке", "Тема"
+                  )
+                  dlg().setTitle("Настройки").setItems(names) { _, w ->
+                      when (w) {
+                          0 -> choose("Стиль часов", arrayOf("Тонкие, по центру", "Столбиком, слева (как Pixel)"), "clockStyle", 0)
+                          1 -> choose("Цвет часов", arrayOf("Белый", "Чёрный", "Акцентный"), "clockColor", 0)
+                          2 -> choose("Размер часов", arrayOf("Маленькие", "Средние", "Большие"), "clockSize", 1)
+                          3 -> choose("Формат времени", arrayOf("24 часа", "12 часов"), "h12", 0)
+                          4 -> choose("Акцентный цвет",
+                              arrayOf("Синий", "Зелёный", "Красный", "Оранжевый", "Фиолетовый", "Розовый", "Бирюзовый"), "accent", 0)
+                          5 -> choose("Форма иконок", arrayOf("Круг", "Сквиркл", "Квадрат"), "shape", 0)
+                          6 -> choose("Размер иконок", arrayOf("Маленькие", "Средние", "Большие"), "iconSize", 1)
+                          7 -> choose("Колонок в списке", arrayOf("3", "4", "5"), "cols", 1)
+                          else -> choose("Тема", arrayOf("Авто", "Светлая", "Тёмная"), "theme", 0)
+                      }
+                  }.show()
+              }
+
+              private fun choose(title: String, opts: Array<String>, key: String, def: Int) {
+                  dlg().setTitle(title).setSingleChoiceItems(opts, p.getInt(key, def)) { d, w ->
+                      p.edit().putInt(key, w).apply()
+                      d.dismiss()
+                      rebuild()
+                      showSettings()
+                  }.show()
+              }
+
+              // ---------- adapter ----------
+              private inner class GridAdapter : BaseAdapter() {
+                  override fun getCount(): Int = shown.size
+                  override fun getItem(pos: Int): Any = shown[pos]
+                  override fun getItemId(pos: Int): Long = pos.toLong()
+                  override fun getView(pos: Int, cv: View?, parent: ViewGroup?): View {
+                      val a = shown[pos]
+                      val v = (cv as? LinearLayout) ?: iconView(a, true, false)
+                      v.tag = a
+                      (v.getChildAt(0) as ImageView).setImageBitmap(a.icon)
+                      (v.getChildAt(1) as TextView).text = a.label
+                      return v
+                  }
+              }
+          }
+          LAUNCHER_EOF
+          mkdir -p "app/src/main/res/drawable"
+          cat > "app/src/main/res/drawable/ic_launcher.xml" <<'LAUNCHER_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path android:fillColor="#4285F4" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#FFFFFF" android:pathData="M30,54a24,24 0 1,0 48,0a24,24 0 1,0 -48,0z" />
+          </vector>
+          LAUNCHER_EOF
+          mkdir -p "app/src/main/res/values"
+          cat > "app/src/main/res/values/styles.xml" <<'LAUNCHER_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="LauncherTheme" parent="android:Theme.Material.Wallpaper.NoTitleBar">
+                  <item name="android:windowTranslucentStatus">true</item>
+                  <item name="android:windowTranslucentNavigation">true</item>
+                  <item name="android:windowDisablePreview">true</item>
+              </style>
+          </resources>
+          LAUNCHER_EOF
+          cat > "build.gradle.kts" <<'LAUNCHER_EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          LAUNCHER_EOF
+          cat > "gradle.properties" <<'LAUNCHER_EOF'
+          org.gradle.jvmargs=-Xmx2g
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          LAUNCHER_EOF
+          cat > "settings.gradle.kts" <<'LAUNCHER_EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "LiteLauncher"
+          include(":app")
+          LAUNCHER_EOF
+      - name: Build
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
