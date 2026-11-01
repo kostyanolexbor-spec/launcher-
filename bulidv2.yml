@@ -1,0 +1,1411 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Create project files
+        run: |
+          mkdir -p "app"
+          cat > "app/build.gradle.kts" <<'LAUNCHER_EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.mylauncher.lite"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.mylauncher.lite"
+                  minSdk = 24
+                  targetSdk = 33
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+              signingConfigs {
+                  getByName("debug") {
+                      storeFile = file("debug.keystore")
+                      storePassword = "android"
+                      keyAlias = "androiddebugkey"
+                      keyPassword = "android"
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
+          }
+          LAUNCHER_EOF
+          mkdir -p "app"
+          base64 -d > "app/debug.keystore" <<'LAUNCHER_EOF'
+          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
+          QcEEFE6pWPT9b22OPOP/oKljNn1zimJTAgInEA==
+          LAUNCHER_EOF
+          mkdir -p "app/src/main"
+          cat > "app/src/main/AndroidManifest.xml" <<'LAUNCHER_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+              <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+              <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+              <uses-permission android:name="android.permission.CAMERA" />
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="Лаунчер">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:stateNotNeeded="true"
+                      android:screenOrientation="portrait"
+                      android:configChanges="orientation|screenSize|keyboardHidden"
+                      android:windowSoftInputMode="adjustResize"
+                      android:theme="@style/LauncherTheme">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.HOME" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          LAUNCHER_EOF
+          mkdir -p "app/src/main/java/com/mylauncher/lite"
+          cat > "app/src/main/java/com/mylauncher/lite/MainActivity.kt" <<'LAUNCHER_EOF'
+          package com.mylauncher.lite
+
+          import android.Manifest
+          import android.app.Activity
+          import android.app.AlertDialog
+          import android.app.WallpaperManager
+          import android.appwidget.AppWidgetHost
+          import android.appwidget.AppWidgetManager
+          import android.appwidget.AppWidgetProviderInfo
+          import android.content.BroadcastReceiver
+          import android.content.ComponentName
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.SharedPreferences
+          import android.content.pm.PackageManager
+          import android.content.res.Configuration
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.ColorFilter
+          import android.graphics.LinearGradient
+          import android.graphics.Paint
+          import android.graphics.Path
+          import android.graphics.PixelFormat
+          import android.graphics.Rect
+          import android.graphics.RectF
+          import android.graphics.Shader
+          import android.graphics.Typeface
+          import android.graphics.drawable.AdaptiveIconDrawable
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.Drawable
+          import android.graphics.drawable.GradientDrawable
+          import android.hardware.camera2.CameraManager
+          import android.media.AudioManager
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.provider.AlarmClock
+          import android.provider.MediaStore
+          import android.provider.Settings
+          import android.text.Editable
+          import android.text.InputType
+          import android.text.TextUtils
+          import android.text.TextWatcher
+          import android.util.TypedValue
+          import android.view.Gravity
+          import android.view.MotionEvent
+          import android.view.View
+          import android.view.ViewConfiguration
+          import android.view.ViewGroup
+          import android.view.animation.DecelerateInterpolator
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.widget.BaseAdapter
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.GridView
+          import android.widget.ImageView
+          import android.widget.LinearLayout
+          import android.widget.SeekBar
+          import android.widget.TextClock
+          import android.widget.TextView
+          import android.widget.Toast
+          import java.util.Calendar
+          import kotlin.math.PI
+          import kotlin.math.abs
+          import kotlin.math.cos
+          import kotlin.math.min
+          import kotlin.math.sin
+
+          class AppItem(val label: String, val pkg: String, val cls: String, val icon: Bitmap?)
+
+          class Tile(val icon: String, val label: String, val act: (View) -> Unit)
+
+          private const val MP = ViewGroup.LayoutParams.MATCH_PARENT
+          private const val WC = ViewGroup.LayoutParams.WRAP_CONTENT
+          private const val REQ_BIND = 102
+          private const val REQ_CONF = 103
+
+          private val ACCENTS = intArrayOf(
+              0xFF4285F4.toInt(), 0xFF34A853.toInt(), 0xFFEA4335.toInt(), 0xFFFB8C00.toInt(),
+              0xFF8E5CF7.toInt(), 0xFFE91E8C.toInt(), 0xFF00BFA5.toInt()
+          )
+
+          // ============ Механические волнистые часы ============
+          class WavyClockView(ctx: Context) : View(ctx) {
+              var face = 0xFFE8DEF8.toInt()
+              var hand = 0xFF2B2930.toInt()
+              var sec = 0xFF4285F4.toInt()
+              private val fillP = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val linesP = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val path = Path()
+              private val ticker = object : Runnable {
+                  override fun run() {
+                      invalidate()
+                      postDelayed(this, 125)
+                  }
+              }
+
+              override fun onAttachedToWindow() {
+                  super.onAttachedToWindow()
+                  removeCallbacks(ticker)
+                  post(ticker)
+              }
+
+              override fun onDetachedFromWindow() {
+                  removeCallbacks(ticker)
+                  super.onDetachedFromWindow()
+              }
+
+              override fun onWindowVisibilityChanged(v: Int) {
+                  super.onWindowVisibilityChanged(v)
+                  removeCallbacks(ticker)
+                  if (v == VISIBLE) post(ticker)
+              }
+
+              private fun drawHand(c: Canvas, cx: Float, cy: Float, deg: Float, len: Float, tail: Float, w: Float, color: Int) {
+                  linesP.style = Paint.Style.STROKE
+                  linesP.strokeCap = Paint.Cap.ROUND
+                  linesP.strokeWidth = w
+                  linesP.color = color
+                  c.save()
+                  c.rotate(deg, cx, cy)
+                  c.drawLine(cx, cy + tail, cx, cy - len, linesP)
+                  c.restore()
+              }
+
+              override fun onDraw(c: Canvas) {
+                  val w = width.toFloat()
+                  val h = height.toFloat()
+                  val cx = w / 2f
+                  val cy = h / 2f
+                  val rad = min(w, h) / 2f
+
+                  fillP.style = Paint.Style.FILL
+                  fillP.color = (face and 0x00FFFFFF) or (0xF2 shl 24)
+                  path.reset()
+                  val steps = 240
+                  for (i in 0..steps) {
+                      val a = 2.0 * PI * i / steps
+                      val r = rad * (0.92f + 0.08f * cos(12.0 * a).toFloat())
+                      val x = cx + r * sin(a).toFloat()
+                      val y = cy - r * cos(a).toFloat()
+                      if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                  }
+                  path.close()
+                  c.drawPath(path, fillP)
+
+                  linesP.style = Paint.Style.FILL
+                  linesP.color = (hand and 0x00FFFFFF) or 0x99000000.toInt()
+                  for (i in 0 until 12) {
+                      val a = Math.toRadians(i * 30.0)
+                      val rr = rad * 0.78f
+                      val x = cx + rr * sin(a).toFloat()
+                      val y = cy - rr * cos(a).toFloat()
+                      c.drawCircle(x, y, if (i % 3 == 0) rad * 0.035f else rad * 0.02f, linesP)
+                  }
+
+                  val cal = Calendar.getInstance()
+                  val ms = cal.get(Calendar.MILLISECOND)
+                  val s = cal.get(Calendar.SECOND) + (ms / 125) / 8f
+                  val m = cal.get(Calendar.MINUTE) + s / 60f
+                  val hr = (cal.get(Calendar.HOUR) % 12) + m / 60f
+
+                  drawHand(c, cx, cy, hr * 30f, rad * 0.45f, 0f, rad * 0.08f, hand)
+                  drawHand(c, cx, cy, m * 6f, rad * 0.68f, 0f, rad * 0.055f, hand)
+                  drawHand(c, cx, cy, s * 6f, rad * 0.78f, rad * 0.16f, rad * 0.025f, sec)
+
+                  linesP.style = Paint.Style.FILL
+                  linesP.color = sec
+                  c.drawCircle(cx, cy, rad * 0.06f, linesP)
+                  linesP.color = face
+                  c.drawCircle(cx, cy, rad * 0.022f, linesP)
+              }
+          }
+
+          // ============ Жидкое стекло ============
+          class GlassDrawable(
+              private val radius: Float,
+              private val dark: Boolean,
+              private val opacityPct: Int,
+              private val strokeW: Float
+          ) : Drawable() {
+              private val basePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val rect = RectF()
+              private val inner = RectF()
+
+              init {
+                  edgePaint.style = Paint.Style.STROKE
+                  edgePaint.strokeWidth = strokeW
+                  innerPaint.style = Paint.Style.STROKE
+                  innerPaint.strokeWidth = strokeW * 0.6f
+                  val a = opacityPct.coerceIn(0, 100) * 255 / 100
+                  val tint = if (dark) 0x26262B else 0xFFFFFF
+                  basePaint.color = tint or ((a * 6 / 10) shl 24)
+              }
+
+              override fun onBoundsChange(b: Rect) {
+                  super.onBoundsChange(b)
+                  rect.set(b)
+                  rect.inset(strokeW / 2f, strokeW / 2f)
+                  inner.set(rect)
+                  inner.inset(strokeW * 1.2f, strokeW * 1.2f)
+                  sheenPaint.shader = LinearGradient(
+                      0f, b.top.toFloat(), 0f, b.bottom.toFloat(),
+                      intArrayOf(0x55FFFFFF, 0x08FFFFFF, 0x22FFFFFF), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP
+                  )
+                  edgePaint.shader = LinearGradient(
+                      b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(),
+                      intArrayOf(0xE6FFFFFF.toInt(), 0x1FFFFFFF, 0x99FFFFFF.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP
+                  )
+                  innerPaint.shader = LinearGradient(
+                      0f, b.top.toFloat(), 0f, b.bottom.toFloat(),
+                      intArrayOf(0x66FFFFFF, 0x00FFFFFF), null, Shader.TileMode.CLAMP
+                  )
+              }
+
+              override fun draw(c: Canvas) {
+                  val r = min(radius, min(rect.width(), rect.height()) / 2f)
+                  val ri = (r - strokeW * 1.2f).coerceAtLeast(0f)
+                  c.drawRoundRect(rect, r, r, basePaint)
+                  c.drawRoundRect(rect, r, r, sheenPaint)
+                  c.drawRoundRect(inner, ri, ri, innerPaint)
+                  c.drawRoundRect(rect, r, r, edgePaint)
+              }
+
+              override fun setAlpha(alpha: Int) {}
+              override fun setColorFilter(cf: ColorFilter?) {}
+              @Suppress("OVERRIDE_DEPRECATION")
+              override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+          }
+
+          class MainActivity : Activity() {
+
+              private lateinit var p: SharedPreferences
+              private lateinit var root: FrameLayout
+              private lateinit var homeLayer: LinearLayout
+              private lateinit var clockBox: FrameLayout
+              private lateinit var widgetBox: LinearLayout
+              private lateinit var dock: LinearLayout
+              private lateinit var drawer: LinearLayout
+              private lateinit var search: EditText
+              private lateinit var grid: GridView
+              private lateinit var panel: FrameLayout
+              private lateinit var sheet: LinearLayout
+              private lateinit var volBar: SeekBar
+              private lateinit var awm: AppWidgetManager
+              private lateinit var host: AppWidgetHost
+              private val adapter = GridAdapter()
+              private var all: List<AppItem> = emptyList()
+              private var shown: List<AppItem> = emptyList()
+              private val ui = Handler(Looper.getMainLooper())
+              private var drawerOpen = false
+              private var panelOpen = false
+              private var torchOn = false
+              private var pendingId = -1
+              private var wallListener: Any? = null
+              private var downX = 0f
+              private var downY = 0f
+              private var topAtDown = false
+              private var topInset = 0
+              private var bottomInset = 0
+              private val longRun = Runnable { if (!drawerOpen && !panelOpen) showHomeMenu() }
+              private val pkgReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(c: Context?, i: Intent?) {
+                      loadApps()
+                  }
+              }
+
+              // ---------- helpers ----------
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+              private fun dark(): Boolean = when (p.getInt("theme", 0)) {
+                  1 -> false
+                  2 -> true
+                  else -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+              }
+
+              private fun accent(): Int = ACCENTS[p.getInt("accent", 0).coerceIn(0, ACCENTS.size - 1)]
+              private fun fg(): Int = if (dark()) 0xFFFFFFFF.toInt() else 0xFF1B1B1F.toInt()
+              private fun fg2(): Int = if (dark()) 0xB3FFFFFF.toInt() else 0x991B1B1F.toInt()
+              private fun iconDp(): Int = intArrayOf(44, 52, 60)[p.getInt("iconSize", 1).coerceIn(0, 2)]
+              private fun cols(): Int = intArrayOf(3, 4, 5)[p.getInt("cols", 1).coerceIn(0, 2)]
+
+              private fun wallLight(): Boolean {
+                  if (Build.VERSION.SDK_INT >= 27) {
+                      try {
+                          val wc = WallpaperManager.getInstance(this).getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
+                          if (wc != null) {
+                              val argb = wc.primaryColor.toArgb()
+                              val lum = (0.299 * Color.red(argb) + 0.587 * Color.green(argb) + 0.114 * Color.blue(argb)) / 255.0
+                              return lum > 0.55
+                          }
+                      } catch (e: Exception) { }
+                  }
+                  return false
+              }
+
+              private fun clockColor(): Int = when (p.getInt("clockColor", 0)) {
+                  0 -> if (wallLight()) 0xFF111111.toInt() else 0xFFFFFFFF.toInt()
+                  1 -> 0xFFFFFFFF.toInt()
+                  2 -> 0xFF111111.toInt()
+                  else -> accent()
+              }
+
+              private fun blend(a: Int, b: Int, t: Float): Int {
+                  val r = (Color.red(a) * (1 - t) + Color.red(b) * t).toInt()
+                  val g = (Color.green(a) * (1 - t) + Color.green(b) * t).toInt()
+                  val bl = (Color.blue(a) * (1 - t) + Color.blue(b) * t).toInt()
+                  return Color.rgb(r, g, bl)
+              }
+
+              private fun pill(c: Int, r: Int): GradientDrawable {
+                  val g = GradientDrawable()
+                  g.setColor(c)
+                  g.cornerRadius = r.toFloat()
+                  return g
+              }
+
+              private fun glass(radiusPx: Int, darkGlass: Boolean, pct: Int): GlassDrawable =
+                  GlassDrawable(radiusPx.toFloat(), darkGlass, pct, dp(1) * 1.5f)
+
+              private fun dlg(): AlertDialog.Builder = AlertDialog.Builder(
+                  this,
+                  if (dark()) android.R.style.Theme_DeviceDefault_Dialog_Alert
+                  else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
+              )
+
+              private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+
+              // ---------- lifecycle ----------
+              override fun onCreate(b: Bundle?) {
+                  super.onCreate(b)
+                  p = getSharedPreferences("cfg", MODE_PRIVATE)
+                  awm = AppWidgetManager.getInstance(this)
+                  host = AppWidgetHost(this, 1024)
+                  topInset = dp(24)
+                  root = FrameLayout(this)
+                  setContentView(root)
+                  root.setOnApplyWindowInsetsListener { _, ins ->
+                      topInset = ins.systemWindowInsetTop
+                      bottomInset = ins.systemWindowInsetBottom
+                      applyInsets()
+                      ins
+                  }
+                  buildAll()
+                  loadApps()
+                  val f = IntentFilter(Intent.ACTION_PACKAGE_ADDED)
+                  f.addAction(Intent.ACTION_PACKAGE_REMOVED)
+                  f.addDataScheme("package")
+                  registerReceiver(pkgReceiver, f)
+                  if (Build.VERSION.SDK_INT >= 27) {
+                      try {
+                          val l = WallpaperManager.OnColorsChangedListener { _, _ ->
+                              ui.post { if (::clockBox.isInitialized) buildClock() }
+                          }
+                          WallpaperManager.getInstance(this).addOnColorsChangedListener(l, ui)
+                          wallListener = l
+                      } catch (e: Exception) { }
+                  }
+              }
+
+              override fun onStart() {
+                  super.onStart()
+                  try { host.startListening() } catch (e: Exception) { }
+                  if (::clockBox.isInitialized) buildClock()
+              }
+
+              override fun onStop() {
+                  try { host.stopListening() } catch (e: Exception) { }
+                  super.onStop()
+              }
+
+              override fun onDestroy() {
+                  try { unregisterReceiver(pkgReceiver) } catch (e: Exception) { }
+                  if (Build.VERSION.SDK_INT >= 27) {
+                      try {
+                          val l = wallListener as? WallpaperManager.OnColorsChangedListener
+                          if (l != null) WallpaperManager.getInstance(this).removeOnColorsChangedListener(l)
+                      } catch (e: Exception) { }
+                  }
+                  super.onDestroy()
+              }
+
+              override fun onNewIntent(intent: Intent?) {
+                  super.onNewIntent(intent)
+                  if (drawerOpen) closeDrawer()
+                  if (panelOpen) closePanel()
+              }
+
+              @Suppress("DEPRECATION")
+              override fun onBackPressed() {
+                  if (panelOpen) closePanel() else if (drawerOpen) closeDrawer()
+              }
+
+              private fun buildAll() {
+                  buildHome()
+                  buildDrawer()
+                  buildPanel()
+                  applyInsets()
+                  renderWidgets()
+              }
+
+              private fun applyInsets() {
+                  if (::homeLayer.isInitialized) homeLayer.setPadding(0, topInset, 0, bottomInset)
+                  if (::drawer.isInitialized) drawer.setPadding(dp(8), topInset + dp(10), dp(8), bottomInset)
+                  if (::panel.isInitialized) panel.setPadding(0, topInset + dp(8), 0, 0)
+              }
+
+              private fun rebuild() {
+                  drawerOpen = false
+                  panelOpen = false
+                  ui.removeCallbacks(longRun)
+                  root.removeAllViews()
+                  buildAll()
+                  loadApps()
+              }
+
+              // ---------- gestures ----------
+              override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+                  when (e.actionMasked) {
+                      MotionEvent.ACTION_DOWN -> {
+                          downX = e.rawX
+                          downY = e.rawY
+                          topAtDown = drawerOpen && atTop()
+                          ui.removeCallbacks(longRun)
+                          if (!drawerOpen && !panelOpen) ui.postDelayed(longRun, ViewConfiguration.getLongPressTimeout() + 200L)
+                      }
+                      MotionEvent.ACTION_MOVE -> {
+                          if (abs(e.rawY - downY) > dp(16) || abs(e.rawX - downX) > dp(16)) ui.removeCallbacks(longRun)
+                      }
+                      MotionEvent.ACTION_UP -> {
+                          ui.removeCallbacks(longRun)
+                          val dy = e.rawY - downY
+                          val dx = e.rawX - downX
+                          val vertical = abs(dy) > abs(dx)
+                          if (panelOpen) {
+                              if (vertical && dy < -dp(60)) closePanel()
+                          } else if (drawerOpen) {
+                              if (vertical && topAtDown && dy > dp(110)) closeDrawer()
+                          } else if (vertical && dy < -dp(90)) {
+                              openDrawer(false)
+                          } else if (vertical && dy > dp(90)) {
+                              if (downX > resources.displayMetrics.widthPixels / 2) openPanel() else expandShade()
+                          }
+                      }
+                      MotionEvent.ACTION_CANCEL -> ui.removeCallbacks(longRun)
+                  }
+                  return super.dispatchTouchEvent(e)
+              }
+
+              private fun atTop(): Boolean {
+                  if (!::grid.isInitialized) return false
+                  val first = grid.getChildAt(0)
+                  return grid.firstVisiblePosition == 0 && (first == null || first.top >= grid.paddingTop)
+              }
+
+              private fun expandShade() {
+                  try {
+                      val sb = getSystemService("statusbar")
+                      val m = Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel")
+                      m.invoke(sb)
+                  } catch (e: Exception) { }
+              }
+
+              // ---------- home screen ----------
+              private fun buildHome() {
+                  homeLayer = LinearLayout(this)
+                  homeLayer.orientation = LinearLayout.VERTICAL
+                  root.addView(homeLayer, FrameLayout.LayoutParams(MP, MP))
+
+                  clockBox = FrameLayout(this)
+                  homeLayer.addView(clockBox, LinearLayout.LayoutParams(MP, WC))
+                  buildClock()
+
+                  widgetBox = LinearLayout(this)
+                  widgetBox.orientation = LinearLayout.VERTICAL
+                  homeLayer.addView(widgetBox, LinearLayout.LayoutParams(MP, 0, 1f))
+
+                  val dw = p.getInt("dockW", 0)
+                  val dh = p.getInt("dockH", 0)
+                  val dr = p.getInt("dockR", -1).let { if (it < 0) dp(30) else it }
+                  val db = p.getInt("dockB", -1).let { if (it < 0) dp(12) else it }
+                  val da = p.getInt("dockA", 40)
+                  dock = LinearLayout(this)
+                  dock.orientation = LinearLayout.HORIZONTAL
+                  dock.gravity = Gravity.CENTER
+                  dock.setPadding(dp(10), dp(8), dp(10), dp(8))
+                  dock.background = glass(dr, dark(), da)
+                  val lp = LinearLayout.LayoutParams(if (dw > 0) dw else MP, if (dh > 0) dh else WC)
+                  lp.gravity = Gravity.CENTER_HORIZONTAL
+                  val side = if (dw > 0) 0 else dp(16)
+                  lp.setMargins(side, 0, side, db)
+                  homeLayer.addView(dock, lp)
+              }
+
+              private fun clockText(f24: String, f12: String, sp: Float, tf: String, color: Int): TextClock {
+                  val c = TextClock(this)
+                  c.format24Hour = f24
+                  c.format12Hour = f12
+                  c.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+                  c.typeface = Typeface.create(tf, Typeface.NORMAL)
+                  c.setTextColor(color)
+                  c.includeFontPadding = false
+                  c.gravity = Gravity.CENTER
+                  c.setShadowLayer(10f, 0f, 2f, 0x40000000)
+                  return c
+              }
+
+              private fun buildClock() {
+                  clockBox.removeAllViews()
+                  val mul = floatArrayOf(0.8f, 1f, 1.2f)[p.getInt("clockSize", 1).coerceIn(0, 2)]
+                  val mode = p.getInt("clockColor", 0)
+                  val col = clockColor()
+                  val dateCol = (col and 0x00FFFFFF) or 0xE6000000.toInt()
+                  val h12 = p.getInt("h12", 0) == 1
+                  val hm = if (h12) "h:mm" else "HH:mm"
+                  val hh = if (h12) "h" else "HH"
+                  val date = "EEEE, d MMMM"
+                  val style = p.getInt("clockStyle", 2)
+                  val box = LinearLayout(this)
+                  box.orientation = LinearLayout.VERTICAL
+                  box.setOnClickListener {
+                      try { startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS)) } catch (e: Exception) { }
+                  }
+                  if (style == 2) {
+                      box.gravity = Gravity.CENTER_HORIZONTAL
+                      val wc = WavyClockView(this)
+                      val a = accent()
+                      val faceDark = mode == 2 || (mode == 0 && wallLight())
+                      if (mode == 3) {
+                          wc.face = a
+                          wc.hand = 0xFFFFFFFF.toInt()
+                          wc.sec = 0xFFFFD54F.toInt()
+                      } else if (faceDark) {
+                          wc.face = blend(a, 0xFF000000.toInt(), 0.65f)
+                          wc.hand = blend(a, 0xFFFFFFFF.toInt(), 0.85f)
+                          wc.sec = blend(a, 0xFFFFFFFF.toInt(), 0.35f)
+                      } else {
+                          wc.face = blend(a, 0xFFFFFFFF.toInt(), 0.82f)
+                          wc.hand = blend(a, 0xFF000000.toInt(), 0.75f)
+                          wc.sec = a
+                      }
+                      val s = dp((200 * mul).toInt())
+                      box.addView(wc, LinearLayout.LayoutParams(s, s))
+                      val dlp = LinearLayout.LayoutParams(WC, WC)
+                      dlp.topMargin = dp(10)
+                      box.addView(clockText(date, date, 16f, "sans-serif", dateCol), dlp)
+                      val flp = FrameLayout.LayoutParams(WC, WC, Gravity.CENTER_HORIZONTAL or Gravity.TOP)
+                      flp.topMargin = dp(16)
+                      clockBox.addView(box, flp)
+                  } else if (style == 0) {
+                      box.gravity = Gravity.CENTER_HORIZONTAL
+                      box.addView(clockText(hm, hm, 84f * mul, "sans-serif-thin", col))
+                      box.addView(clockText(date, date, 17f, "sans-serif", dateCol))
+                      val flp = FrameLayout.LayoutParams(WC, WC, Gravity.CENTER_HORIZONTAL or Gravity.TOP)
+                      flp.topMargin = dp(24)
+                      clockBox.addView(box, flp)
+                  } else {
+                      box.gravity = Gravity.START
+                      val minCol = if (mode == 3) 0xFFFFFFFF.toInt() else accent()
+                      box.addView(clockText(hh, hh, 104f * mul, "sans-serif-medium", col))
+                      val mlp = LinearLayout.LayoutParams(WC, WC)
+                      mlp.topMargin = -dp(22)
+                      box.addView(clockText("mm", "mm", 104f * mul, "sans-serif-medium", minCol), mlp)
+                      val dlp = LinearLayout.LayoutParams(WC, WC)
+                      dlp.topMargin = dp(6)
+                      box.addView(clockText(date, date, 16f, "sans-serif", dateCol), dlp)
+                      val flp = FrameLayout.LayoutParams(WC, WC, Gravity.TOP or Gravity.START)
+                      flp.setMargins(dp(32), dp(24), 0, 0)
+                      clockBox.addView(box, flp)
+                  }
+              }
+
+              // ---------- widgets ----------
+              private fun widgetIds(): MutableList<Int> =
+                  p.getString("widgets", "")!!.split(",").mapNotNull { it.toIntOrNull() }.toMutableList()
+
+              private fun saveWidgets(l: List<Int>) {
+                  p.edit().putString("widgets", l.joinToString(",")).apply()
+              }
+
+              private fun renderWidgets() {
+                  widgetBox.removeAllViews()
+                  val dm = resources.displayMetrics
+                  val wDp = (dm.widthPixels / dm.density).toInt() - 32
+                  for (id in widgetIds()) {
+                      val info = awm.getAppWidgetInfo(id) ?: continue
+                      try {
+                          val hv = host.createView(this, id, info)
+                          val saved = p.getInt("wh_$id", -1)
+                          val hpx = if (saved > 0) saved else maxOf(info.minHeight, dp(90))
+                          val hDp = (hpx / dm.density).toInt()
+                          hv.updateAppWidgetSize(null, wDp, hDp, wDp, hDp)
+                          hv.setOnLongClickListener {
+                              widgetMenu(id)
+                              true
+                          }
+                          val lp = LinearLayout.LayoutParams(MP, hpx)
+                          lp.setMargins(dp(16), dp(6), dp(16), dp(6))
+                          widgetBox.addView(hv, lp)
+                      } catch (e: Exception) { }
+                  }
+              }
+
+              private fun addWidgetDialog() {
+                  val pm = packageManager
+                  val list = awm.installedProviders.sortedBy { it.loadLabel(pm).lowercase() }
+                  if (list.isEmpty()) {
+                      toast("Виджеты не найдены")
+                      return
+                  }
+                  val names = list.map { it.loadLabel(pm) + " (" + it.provider.packageName.substringAfterLast('.') + ")" }
+                      .toTypedArray()
+                  dlg().setTitle("Выберите виджет").setItems(names) { _, w -> bindWidget(list[w]) }.show()
+              }
+
+              private fun bindWidget(info: AppWidgetProviderInfo) {
+                  val id = host.allocateAppWidgetId()
+                  pendingId = id
+                  var ok = false
+                  try { ok = awm.bindAppWidgetIdIfAllowed(id, info.provider) } catch (e: Exception) { }
+                  if (ok) {
+                      afterBind(id)
+                  } else {
+                      val i = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND)
+                      i.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                      i.putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+                      try {
+                          startActivityForResult(i, REQ_BIND)
+                      } catch (e: Exception) {
+                          host.deleteAppWidgetId(id)
+                          toast("Не удалось добавить виджет")
+                      }
+                  }
+              }
+
+              private fun afterBind(id: Int) {
+                  val info = awm.getAppWidgetInfo(id)
+                  if (info != null && info.configure != null) {
+                      try {
+                          host.startAppWidgetConfigureActivityForResult(this, id, 0, REQ_CONF, null)
+                          return
+                      } catch (e: Exception) { }
+                  }
+                  finishAdd(id)
+              }
+
+              private fun finishAdd(id: Int) {
+                  val l = widgetIds()
+                  if (!l.contains(id)) l.add(id)
+                  saveWidgets(l)
+                  renderWidgets()
+              }
+
+              @Suppress("DEPRECATION")
+              override fun onActivityResult(req: Int, res: Int, data: Intent?) {
+                  super.onActivityResult(req, res, data)
+                  val id = pendingId
+                  if (id < 0) return
+                  if (req == REQ_BIND) {
+                      if (res == RESULT_OK) afterBind(id) else host.deleteAppWidgetId(id)
+                  } else if (req == REQ_CONF) {
+                      if (res == RESULT_OK) finishAdd(id) else host.deleteAppWidgetId(id)
+                  }
+              }
+
+              private fun widgetMenu(id: Int) {
+                  ui.removeCallbacks(longRun)
+                  val items = arrayOf("Высота (px)", "Удалить виджет")
+                  dlg().setTitle("Виджет").setItems(items) { _, w ->
+                      if (w == 0) {
+                          numberDialog("Высота виджета (px)", "wh_$id", "например 400") { renderWidgets() }
+                      } else {
+                          host.deleteAppWidgetId(id)
+                          val l = widgetIds()
+                          l.remove(id)
+                          saveWidgets(l)
+                          renderWidgets()
+                      }
+                  }.show()
+              }
+
+              // ---------- dock ----------
+              private fun dockPkgs(): MutableList<String> =
+                  p.getString("dock", "")!!.split(",").filter { it.isNotEmpty() }.toMutableList()
+
+              private fun saveDock(l: List<String>) {
+                  p.edit().putString("dock", l.joinToString(",")).apply()
+              }
+
+              private fun defaultDock(): MutableList<String> {
+                  val intents = listOf(
+                      Intent(Intent.ACTION_DIAL),
+                      Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING),
+                      Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_BROWSER),
+                      Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+                  )
+                  val out = mutableListOf<String>()
+                  for (i in intents) {
+                      val pkg = try {
+                          packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+                      } catch (e: Exception) { null }
+                      if (pkg != null && pkg != "android" && all.any { it.pkg == pkg } && pkg !in out) out.add(pkg)
+                  }
+                  return out
+              }
+
+              private fun refreshDock() {
+                  dock.removeAllViews()
+                  for (pkg in dockPkgs()) {
+                      val a = all.firstOrNull { it.pkg == pkg } ?: continue
+                      dock.addView(iconView(a, false, true), LinearLayout.LayoutParams(0, WC, 1f))
+                  }
+                  dock.visibility = if (dock.childCount == 0) View.GONE else View.VISIBLE
+              }
+
+              // ---------- icons ----------
+              private fun makeIcon(dr: Drawable, px: Int): Bitmap {
+                  val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+                  val c = Canvas(bmp)
+                  val path = Path()
+                  val rect = RectF(0f, 0f, px.toFloat(), px.toFloat())
+                  when (p.getInt("shape", 0)) {
+                      0 -> path.addCircle(px / 2f, px / 2f, px / 2f, Path.Direction.CW)
+                      1 -> path.addRoundRect(rect, px * 0.36f, px * 0.36f, Path.Direction.CW)
+                      else -> path.addRoundRect(rect, px * 0.14f, px * 0.14f, Path.Direction.CW)
+                  }
+                  c.clipPath(path)
+                  if (Build.VERSION.SDK_INT >= 26 && dr is AdaptiveIconDrawable) {
+                      val off = (px * 0.25f).toInt()
+                      val full = (px * 1.5f).toInt()
+                      val bg = dr.background
+                      if (bg != null) {
+                          bg.setBounds(-off, -off, full - off, full - off)
+                          bg.draw(c)
+                      }
+                      val fgd = dr.foreground
+                      if (fgd != null) {
+                          fgd.setBounds(-off, -off, full - off, full - off)
+                          fgd.draw(c)
+                      }
+                  } else {
+                      c.drawColor(0xFFF1F3F4.toInt())
+                      val pad = (px * 0.14f).toInt()
+                      dr.setBounds(pad, pad, px - pad, px - pad)
+                      dr.draw(c)
+                  }
+                  return bmp
+              }
+
+              private fun loadApps() {
+                  val px = dp(iconDp())
+                  Thread {
+                      val pm = packageManager
+                      val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                      val items = pm.queryIntentActivities(q, 0)
+                          .filter { it.activityInfo.packageName != packageName }
+                          .map { ri ->
+                              val ic = try { makeIcon(ri.loadIcon(pm), px) } catch (e: Throwable) { null }
+                              AppItem(ri.loadLabel(pm).toString(), ri.activityInfo.packageName, ri.activityInfo.name, ic)
+                          }
+                          .sortedBy { it.label.lowercase() }
+                      ui.post {
+                          all = items
+                          if (!p.contains("dock")) saveDock(defaultDock())
+                          refreshDock()
+                          filter(search.text.toString())
+                      }
+                  }.start()
+              }
+
+              private fun iconView(a: AppItem, label: Boolean, fromDock: Boolean): LinearLayout {
+                  val v = LinearLayout(this)
+                  v.orientation = LinearLayout.VERTICAL
+                  v.gravity = Gravity.CENTER_HORIZONTAL
+                  v.setPadding(dp(2), dp(6), dp(2), dp(6))
+                  v.tag = a
+                  val s = dp(iconDp())
+                  val iv = ImageView(this)
+                  iv.setImageBitmap(a.icon)
+                  v.addView(iv, LinearLayout.LayoutParams(s, s))
+                  if (label) {
+                      val t = TextView(this)
+                      t.text = a.label
+                      t.maxLines = 1
+                      t.ellipsize = TextUtils.TruncateAt.END
+                      t.gravity = Gravity.CENTER
+                      t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      t.setTextColor(fg())
+                      val tlp = LinearLayout.LayoutParams(MP, WC)
+                      tlp.topMargin = dp(4)
+                      v.addView(t, tlp)
+                  }
+                  v.setOnClickListener { launch(v.tag as AppItem) }
+                  v.setOnLongClickListener {
+                      appMenu(v.tag as AppItem, fromDock)
+                      true
+                  }
+                  v.setOnTouchListener { view, e ->
+                      when (e.actionMasked) {
+                          MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
+                          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                              view.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                      }
+                      false
+                  }
+                  return v
+              }
+
+              private fun launch(a: AppItem) {
+                  try {
+                      startActivity(
+                          Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                              .setComponent(ComponentName(a.pkg, a.cls))
+                              .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                      )
+                  } catch (e: Exception) {
+                      toast("Не удалось открыть")
+                  }
+                  if (drawerOpen) ui.postDelayed({ closeDrawer() }, 250)
+              }
+
+              private fun openUrl(u: String) {
+                  try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u))) } catch (e: Exception) { }
+              }
+
+              private fun appMenu(a: AppItem, fromDock: Boolean) {
+                  ui.removeCallbacks(longRun)
+                  val items = if (fromDock) arrayOf("Убрать из дока", "О приложении")
+                  else arrayOf("Добавить в док", "О приложении", "Удалить")
+                  dlg().setTitle(a.label).setItems(items) { _, w ->
+                      when (items[w]) {
+                          "Убрать из дока" -> {
+                              val l = dockPkgs()
+                              l.remove(a.pkg)
+                              saveDock(l)
+                              refreshDock()
+                          }
+                          "Добавить в док" -> {
+                              val l = dockPkgs()
+                              if (l.contains(a.pkg)) {
+                                  // already there
+                              } else if (l.size >= 7) {
+                                  toast("Док заполнен (максимум 7)")
+                              } else {
+                                  l.add(a.pkg)
+                                  saveDock(l)
+                                  refreshDock()
+                              }
+                          }
+                          "О приложении" -> {
+                              try {
+                                  startActivity(
+                                      Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + a.pkg))
+                                          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                  )
+                              } catch (e: Exception) { }
+                          }
+                          else -> {
+                              try { startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:" + a.pkg))) } catch (e: Exception) { }
+                          }
+                      }
+                  }.show()
+              }
+
+              // ---------- drawer ----------
+              private fun buildDrawer() {
+                  val dk = dark()
+                  drawer = LinearLayout(this)
+                  drawer.orientation = LinearLayout.VERTICAL
+                  drawer.visibility = View.GONE
+                  drawer.setBackgroundColor(if (dk) 0xF2101014.toInt() else 0xF5F6F7FA.toInt())
+
+                  search = EditText(this)
+                  search.hint = "Поиск приложений"
+                  search.setSingleLine()
+                  search.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                  search.setTextColor(fg())
+                  search.setHintTextColor(fg2())
+                  search.background = pill(if (dk) 0xFF26262B.toInt() else 0xFFE8EAF0.toInt(), dp(26))
+                  search.setPadding(dp(22), 0, dp(22), 0)
+                  search.imeOptions = EditorInfo.IME_ACTION_GO
+                  search.addTextChangedListener(object : TextWatcher {
+                      override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+                      override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+                      override fun afterTextChanged(s: Editable?) {
+                          filter(s?.toString() ?: "")
+                      }
+                  })
+                  search.setOnEditorActionListener { _, _, _ ->
+                      val q = search.text.toString().trim()
+                      val f = shown.firstOrNull()
+                      if (f != null) launch(f)
+                      else if (q.isNotEmpty()) openUrl("https://www.google.com/search?q=" + Uri.encode(q))
+                      true
+                  }
+
+                  grid = GridView(this)
+                  grid.numColumns = cols()
+                  grid.verticalSpacing = dp(8)
+                  grid.selector = ColorDrawable(Color.TRANSPARENT)
+                  grid.setPadding(0, dp(12), 0, dp(8))
+                  grid.clipToPadding = false
+                  grid.isVerticalScrollBarEnabled = false
+                  grid.stretchMode = GridView.STRETCH_COLUMN_WIDTH
+                  grid.adapter = adapter
+
+                  val slp = LinearLayout.LayoutParams(MP, dp(52))
+                  slp.setMargins(dp(8), 0, dp(8), 0)
+                  drawer.addView(search, slp)
+                  drawer.addView(grid, LinearLayout.LayoutParams(MP, 0, 1f))
+                  root.addView(drawer, FrameLayout.LayoutParams(MP, MP))
+              }
+
+              private fun filter(q: String) {
+                  val s = q.trim()
+                  shown = all.filter { s.isEmpty() || it.label.contains(s, true) }
+                  adapter.notifyDataSetChanged()
+              }
+
+              private fun openDrawer(focus: Boolean) {
+                  if (drawerOpen) return
+                  drawerOpen = true
+                  search.setText("")
+                  grid.setSelection(0)
+                  drawer.visibility = View.VISIBLE
+                  drawer.alpha = 0f
+                  drawer.translationY = dp(120).toFloat()
+                  drawer.animate().alpha(1f).translationY(0f).setDuration(240)
+                      .setInterpolator(DecelerateInterpolator()).start()
+                  homeLayer.animate().alpha(0f).scaleX(0.94f).scaleY(0.94f).setDuration(220).start()
+                  if (focus) {
+                      ui.postDelayed({
+                          search.requestFocus()
+                          val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                          imm.showSoftInput(search, 0)
+                      }, 200)
+                  }
+              }
+
+              private fun closeDrawer() {
+                  if (!drawerOpen) return
+                  drawerOpen = false
+                  val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                  imm.hideSoftInputFromWindow(search.windowToken, 0)
+                  search.clearFocus()
+                  drawer.animate().alpha(0f).translationY(dp(120).toFloat()).setDuration(200)
+                      .withEndAction { if (!drawerOpen) drawer.visibility = View.GONE }.start()
+                  homeLayer.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220).start()
+              }
+
+              // ---------- control panel (шторка управления) ----------
+              private fun openSys(action: String) {
+                  closePanel()
+                  try {
+                      startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                  } catch (e: Exception) {
+                      toast("Недоступно на этом телефоне")
+                  }
+              }
+
+              private fun toggleTorch(v: View) {
+                  try {
+                      val cm = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                      val id = cm.cameraIdList[0]
+                      torchOn = !torchOn
+                      cm.setTorchMode(id, torchOn)
+                      v.background = if (torchOn) pill(accent(), dp(20)) else glass(dp(20), true, 45)
+                  } catch (e: SecurityException) {
+                      torchOn = false
+                      requestPermissions(arrayOf(Manifest.permission.CAMERA), 7)
+                  } catch (e: Exception) {
+                      torchOn = false
+                      toast("Фонарик недоступен")
+                  }
+              }
+
+              private fun buildPanel() {
+                  panel = FrameLayout(this)
+                  panel.visibility = View.GONE
+                  panel.setBackgroundColor(0x66000000)
+                  panel.setOnClickListener { closePanel() }
+
+                  sheet = LinearLayout(this)
+                  sheet.orientation = LinearLayout.VERTICAL
+                  sheet.setPadding(dp(12), dp(12), dp(12), dp(14))
+                  sheet.background = glass(dp(32), true, 70)
+                  sheet.isClickable = true
+
+                  val tiles = listOf(
+                      Tile("📶", "Wi-Fi") { openSys(Settings.ACTION_WIFI_SETTINGS) },
+                      Tile("🔵", "Bluetooth") { openSys(Settings.ACTION_BLUETOOTH_SETTINGS) },
+                      Tile("📡", "Сеть") { openSys(Settings.ACTION_WIRELESS_SETTINGS) },
+                      Tile("✈️", "Полёт") { openSys(Settings.ACTION_AIRPLANE_MODE_SETTINGS) },
+                      Tile("🔦", "Фонарик") { toggleTorch(it) },
+                      Tile("🔊", "Звук") { openSys(Settings.ACTION_SOUND_SETTINGS) },
+                      Tile("🌙", "Экран") { openSys(Settings.ACTION_DISPLAY_SETTINGS) },
+                      Tile("⚙️", "Лаунчер") {
+                          closePanel()
+                          showSettings()
+                      }
+                  )
+                  for (r in 0 until 2) {
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.HORIZONTAL
+                      for (c in 0 until 4) {
+                          val t = tiles[r * 4 + c]
+                          val tv = LinearLayout(this)
+                          tv.orientation = LinearLayout.VERTICAL
+                          tv.gravity = Gravity.CENTER
+                          tv.background = glass(dp(20), true, 45)
+                          val ic = TextView(this)
+                          ic.text = t.icon
+                          ic.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+                          ic.gravity = Gravity.CENTER
+                          tv.addView(ic, LinearLayout.LayoutParams(WC, WC))
+                          val lb = TextView(this)
+                          lb.text = t.label
+                          lb.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                          lb.setTextColor(0xFFFFFFFF.toInt())
+                          lb.gravity = Gravity.CENTER
+                          tv.addView(lb, LinearLayout.LayoutParams(WC, WC))
+                          tv.setOnClickListener { t.act(tv) }
+                          val lp = LinearLayout.LayoutParams(0, dp(76), 1f)
+                          lp.setMargins(dp(4), dp(4), dp(4), dp(4))
+                          row.addView(tv, lp)
+                      }
+                      sheet.addView(row, LinearLayout.LayoutParams(MP, WC))
+                  }
+
+                  val volRow = LinearLayout(this)
+                  volRow.orientation = LinearLayout.HORIZONTAL
+                  volRow.gravity = Gravity.CENTER_VERTICAL
+                  volRow.background = glass(dp(22), true, 45)
+                  volRow.setPadding(dp(16), dp(6), dp(16), dp(6))
+                  val vi = TextView(this)
+                  vi.text = "🔉"
+                  vi.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                  volRow.addView(vi, LinearLayout.LayoutParams(WC, WC))
+                  volBar = SeekBar(this)
+                  val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                  volBar.max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                  volBar.progress = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                  volBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(s: SeekBar?, pr: Int, fromUser: Boolean) {
+                          if (fromUser) {
+                              try { audio.setStreamVolume(AudioManager.STREAM_MUSIC, pr, 0) } catch (e: Exception) { }
+                          }
+                      }
+                      override fun onStartTrackingTouch(s: SeekBar?) {}
+                      override fun onStopTrackingTouch(s: SeekBar?) {}
+                  })
+                  val vlp = LinearLayout.LayoutParams(0, WC, 1f)
+                  vlp.leftMargin = dp(8)
+                  volRow.addView(volBar, vlp)
+                  val rlp = LinearLayout.LayoutParams(MP, WC)
+                  rlp.setMargins(dp(4), dp(8), dp(4), 0)
+                  sheet.addView(volRow, rlp)
+
+                  val hint = TextView(this)
+                  hint.text = "Свайп вниз слева: уведомления · справа: управление"
+                  hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                  hint.setTextColor(0xAAFFFFFF.toInt())
+                  hint.gravity = Gravity.CENTER
+                  val hlp = LinearLayout.LayoutParams(MP, WC)
+                  hlp.topMargin = dp(10)
+                  sheet.addView(hint, hlp)
+
+                  val flp = FrameLayout.LayoutParams(MP, WC, Gravity.TOP)
+                  flp.setMargins(dp(10), 0, dp(10), 0)
+                  panel.addView(sheet, flp)
+                  root.addView(panel, FrameLayout.LayoutParams(MP, MP))
+              }
+
+              private fun openPanel() {
+                  if (panelOpen) return
+                  panelOpen = true
+                  try {
+                      val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                      volBar.progress = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                  } catch (e: Exception) { }
+                  panel.visibility = View.VISIBLE
+                  panel.alpha = 0f
+                  sheet.translationY = -dp(260).toFloat()
+                  panel.animate().alpha(1f).setDuration(200).start()
+                  sheet.animate().translationY(0f).setDuration(260).setInterpolator(DecelerateInterpolator()).start()
+              }
+
+              private fun closePanel() {
+                  if (!panelOpen) return
+                  panelOpen = false
+                  panel.animate().alpha(0f).setDuration(180)
+                      .withEndAction { if (!panelOpen) panel.visibility = View.GONE }.start()
+                  sheet.animate().translationY(-dp(260).toFloat()).setDuration(200).start()
+              }
+
+              // ---------- menus ----------
+              private fun showHomeMenu() {
+                  val items = arrayOf("Настройки", "Добавить виджет", "Обои", "Очистить док")
+                  dlg().setItems(items) { _, w ->
+                      when (w) {
+                          0 -> showSettings()
+                          1 -> addWidgetDialog()
+                          2 -> try {
+                              startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Обои"))
+                          } catch (e: Exception) { }
+                          else -> {
+                              saveDock(emptyList())
+                              refreshDock()
+                          }
+                      }
+                  }.show()
+              }
+
+              private fun showSettings() {
+                  val names = arrayOf(
+                      "Часы: стиль", "Часы: цвет", "Часы: размер", "Формат времени (цифровые)",
+                      "Акцентный цвет", "Форма иконок", "Размер иконок", "Колонок в списке", "Тема",
+                      "Док: жидкое стекло и размеры (px)"
+                  )
+                  dlg().setTitle("Настройки").setItems(names) { _, w ->
+                      when (w) {
+                          0 -> choose("Стиль часов",
+                              arrayOf("Цифровые тонкие", "Цифровые столбиком", "Механические волнистые"), "clockStyle", 2)
+                          1 -> choose("Цвет часов", arrayOf("Авто (по обоям)", "Светлые", "Тёмные", "Акцентный"), "clockColor", 0)
+                          2 -> choose("Размер часов", arrayOf("Маленькие", "Средние", "Большие"), "clockSize", 1)
+                          3 -> choose("Формат времени", arrayOf("24 часа", "12 часов"), "h12", 0)
+                          4 -> choose("Акцентный цвет",
+                              arrayOf("Синий", "Зелёный", "Красный", "Оранжевый", "Фиолетовый", "Розовый", "Бирюзовый"), "accent", 0)
+                          5 -> choose("Форма иконок", arrayOf("Круг", "Сквиркл", "Квадрат"), "shape", 0)
+                          6 -> choose("Размер иконок", arrayOf("Маленькие", "Средние", "Большие"), "iconSize", 1)
+                          7 -> choose("Колонок в списке", arrayOf("3", "4", "5"), "cols", 1)
+                          8 -> choose("Тема", arrayOf("Авто", "Светлая", "Тёмная"), "theme", 0)
+                          else -> showDockSettings()
+                      }
+                  }.show()
+              }
+
+              private fun showDockSettings() {
+                  val names = arrayOf(
+                      "Ширина дока, px (пусто = на всю ширину)",
+                      "Высота дока, px (пусто = авто)",
+                      "Скругление, px",
+                      "Отступ снизу, px",
+                      "Прозрачность стекла, 0–100",
+                      "Сбросить размеры дока"
+                  )
+                  dlg().setTitle("Док (жидкое стекло)").setItems(names) { _, w ->
+                      val done = {
+                          rebuild()
+                          showSettings()
+                      }
+                      when (w) {
+                          0 -> numberDialog("Ширина дока (px)", "dockW", "например 900", done)
+                          1 -> numberDialog("Высота дока (px)", "dockH", "например 220", done)
+                          2 -> numberDialog("Скругление (px)", "dockR", "например 90", done)
+                          3 -> numberDialog("Отступ снизу (px)", "dockB", "например 40", done)
+                          4 -> numberDialog("Прозрачность стекла (0–100)", "dockA", "например 40", done)
+                          else -> {
+                              p.edit().remove("dockW").remove("dockH").remove("dockR").remove("dockB").remove("dockA").apply()
+                              done()
+                          }
+                      }
+                  }.show()
+              }
+
+              private fun numberDialog(title: String, key: String, hint: String, onDone: () -> Unit) {
+                  val et = EditText(this)
+                  et.inputType = InputType.TYPE_CLASS_NUMBER
+                  et.hint = hint
+                  et.setTextColor(fg())
+                  et.setHintTextColor(fg2())
+                  val cur = p.getInt(key, -1)
+                  if (cur >= 0) et.setText(cur.toString())
+                  val box = FrameLayout(this)
+                  box.setPadding(dp(24), dp(8), dp(24), 0)
+                  box.addView(et, FrameLayout.LayoutParams(MP, WC))
+                  dlg().setTitle(title).setView(box)
+                      .setPositiveButton("OK") { _, _ ->
+                          val s = et.text.toString().trim()
+                          if (s.isEmpty()) p.edit().remove(key).apply()
+                          else p.edit().putInt(key, (s.toIntOrNull() ?: 20000).coerceAtMost(20000)).apply()
+                          onDone()
+                      }
+                      .setNegativeButton("Отмена", null)
+                      .show()
+              }
+
+              private fun choose(title: String, opts: Array<String>, key: String, def: Int) {
+                  dlg().setTitle(title).setSingleChoiceItems(opts, p.getInt(key, def)) { d, w ->
+                      p.edit().putInt(key, w).apply()
+                      d.dismiss()
+                      rebuild()
+                      showSettings()
+                  }.show()
+              }
+
+              // ---------- adapter ----------
+              private inner class GridAdapter : BaseAdapter() {
+                  override fun getCount(): Int = shown.size
+                  override fun getItem(pos: Int): Any = shown[pos]
+                  override fun getItemId(pos: Int): Long = pos.toLong()
+                  override fun getView(pos: Int, cv: View?, parent: ViewGroup?): View {
+                      val a = shown[pos]
+                      val v = (cv as? LinearLayout) ?: iconView(a, true, false)
+                      v.tag = a
+                      (v.getChildAt(0) as ImageView).setImageBitmap(a.icon)
+                      (v.getChildAt(1) as TextView).text = a.label
+                      return v
+                  }
+              }
+          }
+          LAUNCHER_EOF
+          mkdir -p "app/src/main/res/drawable"
+          cat > "app/src/main/res/drawable/ic_launcher.xml" <<'LAUNCHER_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path android:fillColor="#4285F4" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#FFFFFF" android:pathData="M30,54a24,24 0 1,0 48,0a24,24 0 1,0 -48,0z" />
+          </vector>
+          LAUNCHER_EOF
+          mkdir -p "app/src/main/res/values"
+          cat > "app/src/main/res/values/styles.xml" <<'LAUNCHER_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="LauncherTheme" parent="android:Theme.Material.Wallpaper.NoTitleBar">
+                  <item name="android:windowTranslucentStatus">true</item>
+                  <item name="android:windowTranslucentNavigation">true</item>
+                  <item name="android:windowDisablePreview">true</item>
+              </style>
+          </resources>
+          LAUNCHER_EOF
+          cat > "build.gradle.kts" <<'LAUNCHER_EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          LAUNCHER_EOF
+          cat > "gradle.properties" <<'LAUNCHER_EOF'
+          org.gradle.jvmargs=-Xmx2g
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          LAUNCHER_EOF
+          cat > "settings.gradle.kts" <<'LAUNCHER_EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "LiteLauncher"
+          include(":app")
+          LAUNCHER_EOF
+      - name: Build
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
